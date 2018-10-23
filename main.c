@@ -208,5 +208,6 @@ void execPath(int bg, int argc, char *argv[]){
         token = strtok(NULL, ":");
     }
 
+    printf("%s: command not found!\n", argv[0]);
 
 }
