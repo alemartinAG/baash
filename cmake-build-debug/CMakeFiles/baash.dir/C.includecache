@@ -6,7 +6,7 @@
 
 #IncludeRegexTransform: 
 
-/home/ale/CLionProjects/untitled1/main.c
+/home/ale/Repositorios/baash/main.c
 stdio.h
 -
 stdbool.h

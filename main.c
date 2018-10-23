@@ -19,6 +19,7 @@ void execRelativo(bool, int, int, char *[]);
 int execAbs(int, int, char *[]);
 void execPath(int, int, char *[]);
 
+
 int main() {
 
     int buffer = 100;
@@ -162,10 +163,11 @@ int execAbs(int bg, int argc, char *argv[]){
             wait(0);
         }
     } else{
+
         if(execv(argv[0], argv) == -1){
-            printf("no se encontro\n");
-            return -1;
+            return 0;
         }
+
         exit(1);
     }
 
@@ -173,15 +175,38 @@ int execAbs(int bg, int argc, char *argv[]){
 }
 
 void execPath(int bg, int argc, char *argv[]){
-    //trato de ejecutar como relativo
-    char path[256];
-    getcwd(path, 256);
-    strcat(path, "/");
-    strcat(path, argv[0]);
 
+    //trato de ejecutar como relativo
     if(execAbs(bg, argc, argv)){
         return;
     }
 
     //BUSCAR PATH
+    char path_aux[256];
+    char abs_path[256];
+    char argv_prev[256];
+
+    strcpy(path_aux, getenv("PATH"));
+
+    char * token = strtok(path_aux, ":");
+
+    while(token != NULL){
+
+        strcpy(abs_path, token);
+        strcat(abs_path, "/");
+        strcat(abs_path, argv[0]);
+
+        strcpy(argv_prev, argv[0]);
+        argv[0] = abs_path;
+
+        if(execAbs(bg, argc, argv)){
+            return;
+        }
+
+        argv[0] = argv_prev;
+
+        token = strtok(NULL, ":");
+    }
+
+
 }
