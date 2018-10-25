@@ -21,4 +21,8 @@ stdlib.h
 -
 wait.h
 -
+fcntl.h
+-
+sys/stat.h
+-
 
