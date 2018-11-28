@@ -17,14 +17,20 @@
 
 const int IN = 0;
 const int OUT = 1;
-const int PIPE = 2;
-const int AMP = 3;
+const int AMP = 2;
+const int PIPE = 3;
 
+const int BUFF = 256;
+
+const char pipeBuffer[] = {"buffer.txt"};
+
+void readBaash();
 void inputProcessor(int, char *[]);
 
-void execRelativo(bool, int, int, char *[]);
-int execAbs(int, int, char *[]);
-void execPath(int, int, char *[]);
+void execRelativo(bool, int, char *[]);
+int execAbs( int, char *[]);
+void execPath( int, char *[]);
+bool checkFlags(char *);
 
 void changeIO(char []);
 void stdIO();
@@ -33,7 +39,10 @@ int stdout_cpy;
 int stdin_cpy;
 int io_filename;
 
-bool flag_biennegro = false;
+int srv_client_pipe[2];
+int client_srv_pipe[2];
+
+char pipeargs[256];
 
 
 bool flag_oper[4] = {false, false, false, false};
@@ -41,14 +50,7 @@ bool flag_oper[4] = {false, false, false, false};
 
 int main() {
 
-    int buffer = 100;
-    char input[buffer];
-    char *token;
-
-    int argc = 0;
-    char * argv[buffer];
-
-    char hostname[20];
+    char hostname[BUFF];
     char * user;
 
     //User y Hostname
@@ -57,75 +59,25 @@ int main() {
     pass = getpwuid(getuid());
     user = pass -> pw_name;
 
-    char cwd[256];
+    char cwd[BUFF];
 
-    gethostname(hostname, 20);
+    gethostname(hostname, BUFF);
 
     while(1){
 
-        getcwd(cwd, 256);
+        getcwd(cwd, BUFF);
 
         printf(CYAN"%s@%s:"MAGENTA"~%s~"CRESET"$ ", user, hostname, cwd);
 
-        fgets(input, buffer, stdin);
-        input[strlen(input)-1] = '\0';
+        readBaash();
 
-        if(feof(stdin) || strcmp(input, "exit") == 0){
-            return 0;
-        }
-
-        char filename[256];
-        token = strtok(input, " ");
-
-        while(token != NULL){
-
-            //printf("token: %s\n", token);
-
-            if(!strcmp(token, "<")){
-                flag_oper[IN] = true;
-
-                //paso el siguiente argumento como filename
-                token = strtok(NULL, " ");
-                strcpy(filename, token);
-
-                changeIO(filename);
-
-                break;
-            }
-
-            if(!strcmp(token, ">")){
-                flag_oper[OUT] = true;
-
-                //paso el siguiente argumento como filename
-                token = strtok(NULL, " ");
-                strcpy(filename, token);
-
-                changeIO(filename);
-
-                break;
-            }
-
-            if(!strcmp(token, "|")){
-                flag_oper[PIPE] = true;
-            }
-
-            if(strcmp(token, "\n") != 0){
-                argc++;
-                argv[argc-1] = token;
-            }
-
-            token = strtok(NULL, " ");
-        }
-
-        inputProcessor(argc, argv);
-
-        argc = 0;
-
+        //Si hubo redireccion, vuelvo a los std
         if(flag_oper[OUT] || flag_oper[IN]){
             stdIO();
         }
 
-        for(int i = 0; i<4; i++){
+        //Limpio flags
+        for(int i = 0; i<3; i++){
             flag_oper[i] = false;
         }
 
@@ -133,6 +85,118 @@ int main() {
     }
 
     return 0;
+}
+
+void readBaash(){
+
+    int argc = 0;
+    char * argv[BUFF];
+    char input[BUFF];
+
+    char *token;
+
+    fgets(input, BUFF, stdin);
+
+    if(feof(stdin)){
+        exit(0);
+    }
+
+    /*if(!flag_oper[PIPE]){
+        fgets(input, BUFF, stdin);
+        if(feof(stdin)){
+            exit(0);
+        }
+    }
+    else{
+        printf("ENTRE ACA LEA GIL\n");
+
+        strcpy(input, pipeargs);
+
+        flag_oper[PIPE] = false;
+        flag_oper[IN] = true;
+        changeIO(pipeBuffer);
+    }*/
+
+    input[strlen(input)-1] = '\0';
+
+    if(!strcmp(input, "exit")){
+        exit(0);
+    }
+
+
+    token = strtok(input, " ");
+
+    while(token != NULL){
+
+        //printf("token: %s\n", token);
+
+        //Chequeo por '<' '>' '|'
+        if(checkFlags(token)){
+            break;
+        }
+
+        if(strcmp(token, "\n") != 0){
+            argc++;
+            argv[argc-1] = token;
+        }
+
+        token = strtok(NULL, " ");
+    }
+
+    inputProcessor(argc, argv);
+}
+
+bool checkFlags(char * token){
+
+    char filename[BUFF];
+
+    if(!strcmp(token, "<")){
+        flag_oper[IN] = true;
+
+        //paso el siguiente argumento como filename
+        token = strtok(NULL, " ");
+        strcpy(filename, token);
+
+        changeIO(filename);
+
+        return true;
+    }
+
+    if(!strcmp(token, ">")){
+        flag_oper[OUT] = true;
+
+        //paso el siguiente argumento como filename
+        token = strtok(NULL, " ");
+        strcpy(filename, token);
+
+        changeIO(filename);
+
+        return true;
+    }
+
+    if(!strcmp(token, "|")){
+
+        flag_oper[PIPE] = true;
+
+        //flag_oper[OUT] = true;
+
+
+
+        token = strtok(NULL, "\0");
+        strcpy(pipeargs, token);
+
+
+        //changeIO(pipeBuffer);
+        return true;
+    }
+
+    if(!strcmp(token, "&")){
+        flag_oper[AMP] = true;
+
+        return true;
+    }
+
+    return false;
 }
 
 void changeIO(char filename[]){
@@ -168,12 +232,18 @@ void changeIO(char filename[]){
 
 void stdIO(){
 
+    printf("ESTOY ACA y OUT: %i IN: %i"  "\n", flag_oper[OUT], flag_oper[IN]);
+
     close(io_filename);
 
     if(flag_oper[OUT]){
+
+        printf("PONGO STDOUT\n");
         dup2(stdout_cpy, STDOUT_FILENO);
         close(stdout_cpy);
     } else{
+
+        printf("PONGO STDIN\n");
         dup2(stdin_cpy, STDIN_FILENO);
         close(stdin_cpy);
     }
@@ -181,6 +251,11 @@ void stdIO(){
 }
 
 void inputProcessor(int argc, char *argv[] ){
+
+    if(argc == 0){
+        //No hay argumentos
+        return;
+    }
 
     if(strcmp(argv[0], "cd") == 0){
 
@@ -196,45 +271,38 @@ void inputProcessor(int argc, char *argv[] ){
     else{
 
         bool prev_dir = !strncmp("..", argv[0], 2);
-        int background = !strcmp("&", argv[argc-1]);
 
-        if(background){
-            argv[argc-1] = NULL;
-        } else{
-            argc++;
-            argv[argc-1] = NULL;
-        }
+        argc++;
+        argv[argc-1] = NULL;
 
         if(!strncmp(".", argv[0], 1) || prev_dir){
-
             //relativo
-            execRelativo(prev_dir, background,argc, argv);
-
-        } else if(!strncmp("/", argv[0], 1)){
-
-            //absoluto
-            execAbs(background, argc, argv);
-
-        } else{
-
-            //PATH o relativo
-            execPath(background, argc, argv);
+            execRelativo(prev_dir,argc, argv);
         }
-
+        else if(!strncmp("/", argv[0], 1)){
+            //absoluto
+            if(!execAbs( argc, argv)){
+                printf("%s: No such file or directory\n", argv[0]);
+            }
+        }
+        else{
+            //PATH o relativo
+            execPath( argc, argv);
+        }
     }
 }
 
-void execRelativo(bool prev_dir, int bg, int argc, char *argv[]){
+void execRelativo(bool prev_dir, int argc, char *argv[]){
 
-    char path[256];
-    char prevPath[256];
+    char path[BUFF];
+    char prevPath[BUFF];
 
     if(prev_dir){
-        getcwd(prevPath, 256);
+        getcwd(prevPath, BUFF);
         chdir("..");
     }
 
-    getcwd(path, 256);
+    getcwd(path, BUFF);
 
     char *str_aux;
     str_aux = strstr(argv[0], "/");
@@ -243,7 +311,7 @@ void execRelativo(bool prev_dir, int bg, int argc, char *argv[]){
 
     argv[0] = path;
 
-    execAbs(bg, argc, argv);
+    execAbs(argc, argv);
 
     if(prev_dir){
         chdir(prevPath);
@@ -251,10 +319,14 @@ void execRelativo(bool prev_dir, int bg, int argc, char *argv[]){
 
 }
 
-int execAbs(int bg, int argc, char *argv[]){
+int execAbs(int argc, char *argv[]){
 
     pid_t pid;
     pid = fork();
+
+    if(flag_oper[PIPE]){
+
+    }
 
     if(pid < 0){
         printf("ERROR\n");
@@ -262,10 +334,15 @@ int execAbs(int bg, int argc, char *argv[]){
     }
 
     if(pid != 0){
-        if(!bg){
+        //padre
+        //Si no hay ampersand espero
+        if(!flag_oper[AMP]){
             wait(0);
         }
-    } else{
+
+    }
+    else{
+        //hijo
         if(execv(argv[0], argv) == -1){
             return 0;
         }
@@ -276,17 +353,17 @@ int execAbs(int bg, int argc, char *argv[]){
     return 1;
 }
 
-void execPath(int bg, int argc, char *argv[]){
+void execPath(int argc, char *argv[]){
 
     //trato de ejecutar como relativo
-    if(execAbs(bg, argc, argv)){
+    if(execAbs(argc, argv)){
         return;
     }
 
     //BUSCAR PATH
-    char path_aux[256];
-    char abs_path[256];
-    char argv_prev[256];
+    char path_aux[BUFF];
+    char abs_path[BUFF];
+    char argv_prev[BUFF];
 
     strcpy(path_aux, getenv("PATH"));
 
@@ -301,7 +378,7 @@ void execPath(int bg, int argc, char *argv[]){
         strcpy(argv_prev, argv[0]);
         argv[0] = abs_path;
 
-        if(execAbs(bg, argc, argv)){
+        if(execAbs(argc, argv)){
             return;
         }
 
