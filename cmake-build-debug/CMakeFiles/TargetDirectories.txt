@@ -1,3 +1,0 @@
-/home/ale/Repositorios/baash/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/ale/Repositorios/baash/cmake-build-debug/CMakeFiles/rebuild_cache.dir
-/home/ale/Repositorios/baash/cmake-build-debug/CMakeFiles/baash.dir
