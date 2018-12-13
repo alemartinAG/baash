@@ -15,14 +15,15 @@
 #define GREEN   "\x1b[32m"
 #define CRESET   "\x1b[0m"
 
+#define write 1
+#define read 0
+
 const int IN = 0;
 const int OUT = 1;
 const int AMP = 2;
 const int PIPE = 3;
 
 const int BUFF = 256;
-
-const char pipeBuffer[] = {"buffer.txt"};
 
 void readBaash();
 void inputProcessor(int, char *[]);
@@ -39,14 +40,11 @@ int stdout_cpy;
 int stdin_cpy;
 int io_filename;
 
-int srv_client_pipe[2];
-int client_srv_pipe[2];
+char pipe_arguments[256];
 
-char pipeargs[256];
-
+void forkChild(int, char * []);
 
 bool flag_oper[4] = {false, false, false, false};
-
 
 int main() {
 
@@ -80,11 +78,7 @@ int main() {
         for(int i = 0; i<3; i++){
             flag_oper[i] = false;
         }
-
-
     }
-
-    return 0;
 }
 
 void readBaash(){
@@ -101,28 +95,11 @@ void readBaash(){
         exit(0);
     }
 
-    /*if(!flag_oper[PIPE]){
-        fgets(input, BUFF, stdin);
-        if(feof(stdin)){
-            exit(0);
-        }
-    }
-    else{
-        printf("ENTRE ACA LEA GIL\n");
-
-        strcpy(input, pipeargs);
-
-        flag_oper[PIPE] = false;
-        flag_oper[IN] = true;
-        changeIO(pipeBuffer);
-    }*/
-
     input[strlen(input)-1] = '\0';
 
     if(!strcmp(input, "exit")){
         exit(0);
     }
-
 
     token = strtok(input, " ");
 
@@ -135,6 +112,7 @@ void readBaash(){
             break;
         }
 
+        //No tomo al enter como argumento
         if(strcmp(token, "\n") != 0){
             argc++;
             argv[argc-1] = token;
@@ -143,7 +121,7 @@ void readBaash(){
         token = strtok(NULL, " ");
     }
 
-    inputProcessor(argc, argv);
+    forkChild(argc, argv);
 }
 
 bool checkFlags(char * token){
@@ -178,15 +156,10 @@ bool checkFlags(char * token){
 
         flag_oper[PIPE] = true;
 
-        //flag_oper[OUT] = true;
+        //guardo la cadena de argumentos restantes
+        token = strtok(NULL, "/0");
+        strcpy(pipe_arguments, token);
 
-
-
-        token = strtok(NULL, "\0");
-        strcpy(pipeargs, token);
-
-
-        //changeIO(pipeBuffer);
         return true;
     }
 
@@ -197,6 +170,104 @@ bool checkFlags(char * token){
     }
 
     return false;
+}
+
+void forkChild(int argc, char * argv[]){
+
+    if(argc == 0){
+        //No hay argumentos
+        return;
+    }
+
+    if(strcmp(argv[0], "cd") == 0){
+        //manejo de cd
+        if(argc > 1){
+            chdir(argv[1]); //si tiene arg me voy a esa direccion
+        } else{
+            chdir(getenv("HOME")); // caso contrario me voy al home
+        }
+    }
+    else{
+
+        pid_t child_pid;
+        child_pid = fork();
+        int status;
+
+        if(child_pid < 0){
+            printf("ERROR EN FORK HIJO\n");
+            exit(3);
+        }
+
+        if(child_pid != 0){
+            //padre
+
+            //Si no hay ampersand espero al hijo
+            if(!flag_oper[AMP]){
+                waitpid(child_pid, &status, 0);
+            }
+
+        }
+        else{
+            //hijo
+
+            if(flag_oper[PIPE]){
+                //Manejo del pipe
+                char * argv_pipe[BUFF];
+                int    argc_pipe = 0;
+
+                char * token;
+                token = strtok(pipe_arguments, " ");
+
+                //termino de recolectar argumentos
+                while(token != NULL){
+
+                    //No tomo al enter como argumento
+                    if(strcmp(token, "\n") != 0){
+                        argv_pipe[argc_pipe] = token;
+                        argc_pipe++;
+                    }
+
+                    token = strtok(NULL, " ");
+                }
+
+                int p[2];
+                pipe(p);
+
+                pid_t grandch_pid;
+                grandch_pid = fork(); //creamos un nieto
+
+                if(grandch_pid < 0){
+                    perror("ERROR EN FORK NIETO\n");
+                    exit(1);
+                }
+
+                if(grandch_pid == 0){
+                    //nieto
+                    close(p[read]);
+                    dup2(p[write],1);	//salida del nieto a entrada del hijo
+
+                    inputProcessor(argc, argv);
+
+                    exit(1);
+                }
+                else{
+                    //hijo
+                    close(p[write]);
+                    dup2(p[read],0);
+
+                    wait(0);	//Espera a su hijo
+
+                    inputProcessor(argc_pipe, argv_pipe);
+                    exit(1);
+                }
+            }
+            else{
+
+                inputProcessor(argc, argv);
+                exit(1);
+            }
+        }
+    }
 }
 
 void changeIO(char filename[]){
@@ -232,18 +303,12 @@ void changeIO(char filename[]){
 
 void stdIO(){
 
-    printf("ESTOY ACA y OUT: %i IN: %i"  "\n", flag_oper[OUT], flag_oper[IN]);
-
     close(io_filename);
 
     if(flag_oper[OUT]){
-
-        printf("PONGO STDOUT\n");
         dup2(stdout_cpy, STDOUT_FILENO);
         close(stdout_cpy);
     } else{
-
-        printf("PONGO STDIN\n");
         dup2(stdin_cpy, STDIN_FILENO);
         close(stdin_cpy);
     }
@@ -252,24 +317,6 @@ void stdIO(){
 
 void inputProcessor(int argc, char *argv[] ){
 
-    if(argc == 0){
-        //No hay argumentos
-        return;
-    }
-
-    if(strcmp(argv[0], "cd") == 0){
-
-        //manejo de cd
-
-        if(argc > 1){
-            chdir(argv[1]); //si tiene arg me voy a esa direccion
-        } else{
-            chdir(getenv("HOME")); // caso contrario me voy al home
-        }
-
-    }
-    else{
-
         bool prev_dir = !strncmp("..", argv[0], 2);
 
         argc++;
@@ -277,19 +324,19 @@ void inputProcessor(int argc, char *argv[] ){
 
         if(!strncmp(".", argv[0], 1) || prev_dir){
             //relativo
-            execRelativo(prev_dir,argc, argv);
+            execRelativo(prev_dir, argc, argv);
         }
         else if(!strncmp("/", argv[0], 1)){
             //absoluto
-            if(!execAbs( argc, argv)){
+            if(!execAbs(argc, argv)){
                 printf("%s: No such file or directory\n", argv[0]);
             }
         }
         else{
             //PATH o relativo
-            execPath( argc, argv);
+            execPath(argc, argv);
         }
-    }
+
 }
 
 void execRelativo(bool prev_dir, int argc, char *argv[]){
@@ -321,36 +368,12 @@ void execRelativo(bool prev_dir, int argc, char *argv[]){
 
 int execAbs(int argc, char *argv[]){
 
-    pid_t pid;
-    pid = fork();
-
-    if(flag_oper[PIPE]){
-
+    if(execv(argv[0], argv) == -1){
+        return 0;
     }
 
-    if(pid < 0){
-        printf("ERROR\n");
-        exit(3);
-    }
+    exit(1);
 
-    if(pid != 0){
-        //padre
-        //Si no hay ampersand espero
-        if(!flag_oper[AMP]){
-            wait(0);
-        }
-
-    }
-    else{
-        //hijo
-        if(execv(argv[0], argv) == -1){
-            return 0;
-        }
-
-        exit(1);
-    }
-
-    return 1;
 }
 
 void execPath(int argc, char *argv[]){
@@ -385,6 +408,7 @@ void execPath(int argc, char *argv[]){
         argv[0] = argv_prev;
 
         token = strtok(NULL, ":");
+
     }
 
     printf("%s: command not found!\n", argv[0]);
