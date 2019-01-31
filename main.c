@@ -11,12 +11,10 @@
 
 #define MAGENTA "\x1b[35m"
 #define CYAN    "\x1b[36m"
-#define RED     "\x1b[31m"
-#define GREEN   "\x1b[32m"
 #define CRESET   "\x1b[0m"
 
-#define write 1
-#define read 0
+#define WRITE 1
+#define READ 0
 
 const int IN = 0;
 const int OUT = 1;
@@ -75,9 +73,11 @@ int main() {
         }
 
         //Limpio flags
-        for(int i = 0; i<3; i++){
+        for(int i = 0; i<4; i++){
             flag_oper[i] = false;
         }
+
+        memset(pipe_arguments, 0, BUFF);
     }
 }
 
@@ -243,8 +243,8 @@ void forkChild(int argc, char * argv[]){
 
                 if(grandch_pid == 0){
                     //nieto
-                    close(p[read]);
-                    dup2(p[write],1);	//salida del nieto a entrada del hijo
+                    close(p[READ]);
+                    dup2(p[WRITE],1);	//salida del nieto a entrada del hijo
 
                     inputProcessor(argc, argv);
 
@@ -252,8 +252,8 @@ void forkChild(int argc, char * argv[]){
                 }
                 else{
                     //hijo
-                    close(p[write]);
-                    dup2(p[read],0);
+                    close(p[WRITE]);
+                    dup2(p[READ],0);
 
                     wait(0);	//Espera a su hijo
 
